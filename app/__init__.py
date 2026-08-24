@@ -1,0 +1,1 @@
+"""ForumX application package."""
