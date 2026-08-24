@@ -2,10 +2,12 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.users import router as users_router
 from app.core.db import SessionLocal
 
 
 app = FastAPI(title="ForumX API")
+app.include_router(users_router)
 
 
 @app.get("/health")
