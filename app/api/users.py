@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pwdlib import PasswordHash
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.db import get_db_session
+from app.core.security import hash_password
 from app.models import User
 from app.schemas.user import UserCreate, UserRead
 
 
 router = APIRouter(prefix="/users", tags=["users"])
-password_hash = PasswordHash.recommended()
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -20,7 +20,7 @@ def create_user(
     user = User(
         username=user_in.username,
         email=user_in.email,
-        password_hash=password_hash.hash(user_in.password),
+        password_hash=hash_password(user_in.password),
     )
 
     db.add(user)
@@ -52,3 +52,8 @@ def create_user(
 
     db.refresh(user)
     return user
+
+
+@router.get("/me", response_model=UserRead)
+def read_current_user(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
