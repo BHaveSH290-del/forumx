@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.db import get_db_session
 from app.models import Community, Post, User
-from app.schemas.post import PostCreate, PostRead
+from app.schemas.post import PostCreate, PostRead, PostUpdate
 
 
 router = APIRouter(tags=["posts"])
@@ -77,3 +80,68 @@ def get_post(
         )
 
     return post
+
+
+@router.patch("/posts/{post_id}", response_model=PostRead)
+def update_post(
+    post_id: int,
+    post_in: PostUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> Post:
+    post = db.get(Post, post_id)
+
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found.",
+        )
+
+    if current_user.id != post.author_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this post.",
+        )
+
+    if post_in.title is not None:
+        post.title = post_in.title
+    if post_in.content is not None:
+        post.content = post_in.content
+    post.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(post)
+    return post
+
+
+@router.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_post(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> Response:
+    post = db.get(Post, post_id)
+
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found.",
+        )
+
+    if current_user.id != post.author_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete this post.",
+        )
+
+    db.delete(post)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Post cannot be deleted while it has comments.",
+        ) from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

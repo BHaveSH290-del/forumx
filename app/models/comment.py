@@ -18,6 +18,10 @@ class Comment(Base):
         nullable=False,
         server_default=func.now(),
     )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     author = relationship("User")
     post = relationship("Post")
