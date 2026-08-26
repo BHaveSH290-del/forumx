@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.auth import router as auth_router
 from app.api.communities import router as communities_router
+from app.api.posts import router as posts_router
 from app.api.users import router as users_router
 from app.core.db import SessionLocal
 
@@ -11,6 +12,7 @@ from app.core.db import SessionLocal
 app = FastAPI(title="ForumX API")
 app.include_router(auth_router)
 app.include_router(communities_router)
+app.include_router(posts_router)
 app.include_router(users_router)
 
 
