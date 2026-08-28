@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.db import get_db_session
-from app.models import Community, Post, User
+from app.models import Community, CommunityMember, Post, User
 from app.schemas.post import PostCreate, PostRead, PostUpdate
 
 
@@ -31,6 +31,21 @@ def create_post(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Community not found.",
+        )
+
+    is_creator = community.creator_id == current_user.id
+    is_member = False
+    if not is_creator:
+        existing_membership = db.get(
+            CommunityMember,
+            {"user_id": current_user.id, "community_id": community.id},
+        )
+        is_member = existing_membership is not None
+
+    if not (is_creator or is_member):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be a member or creator of this community to post.",
         )
 
     post = Post(
