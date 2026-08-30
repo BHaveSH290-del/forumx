@@ -20,3 +20,9 @@ class CommunityMemberRead(BaseModel):
     username: str
 
     model_config = {"from_attributes": True}
+
+
+class CommunityMembershipStatus(BaseModel):
+    is_member: bool
+    is_creator: bool
+

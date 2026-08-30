@@ -7,6 +7,7 @@ from app.core.db import get_db_session
 from app.models import Community, CommunityMember, User
 from app.schemas.membership import (
     CommunityMemberRead,
+    CommunityMembershipStatus,
     MembershipRead,
     MembershipRequest,
 )
@@ -110,3 +111,34 @@ def list_community_members(
         .order_by(User.id)
     ).all()
     return list(members)
+
+
+@router.get(
+    "/{community_id}/membership",
+    response_model=CommunityMembershipStatus,
+)
+def get_community_membership_status(
+    community_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> dict[str, bool]:
+    community = db.get(Community, community_id)
+
+    if community is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Community not found.",
+        )
+
+    is_creator = community.creator_id == current_user.id
+    membership = db.get(
+        CommunityMember,
+        {"user_id": current_user.id, "community_id": community.id},
+    )
+    is_member = membership is not None
+
+    return {
+        "is_member": is_member,
+        "is_creator": is_creator,
+    }
+
