@@ -1,17 +1,24 @@
 from datetime import datetime, timezone
+from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.db import get_db_session
-from app.models import Community, CommunityMember, Post, User
+from app.models import Community, CommunityMember, Post, PostVote, User, VoteType
 from app.schemas.post import PostCreate, PostRead, PostUpdate
 
 
 router = APIRouter(tags=["posts"])
+
+
+class SortOrder(str, Enum):
+    NEWEST = "newest"
+    OLDEST = "oldest"
+    POPULAR = "popular"
 
 
 @router.post(
@@ -60,9 +67,22 @@ def create_post(
     return post
 
 
+def _get_vote_counts_subquery():
+    return (
+        select(
+            PostVote.post_id,
+            func.count(case((PostVote.vote_type == VoteType.UP, 1))).label("upvote_count"),
+            func.count(case((PostVote.vote_type == VoteType.DOWN, 1))).label("downvote_count"),
+        )
+        .group_by(PostVote.post_id)
+        .subquery()
+    )
+
+
 @router.get("/communities/{community_id}/posts", response_model=list[PostRead])
 def list_community_posts(
     community_id: int,
+    sort: SortOrder = Query(default=SortOrder.NEWEST),
     db: Session = Depends(get_db_session),
 ) -> list[Post]:
     community = db.get(Community, community_id)
@@ -73,12 +93,39 @@ def list_community_posts(
             detail="Community not found.",
         )
 
-    posts = db.scalars(
-        select(Post)
+    vote_counts = _get_vote_counts_subquery()
+
+    base_query = (
+        select(
+            Post,
+            func.coalesce(vote_counts.c.upvote_count, 0).label("upvote_count"),
+            func.coalesce(vote_counts.c.downvote_count, 0).label("downvote_count"),
+        )
+        .outerjoin(vote_counts, Post.id == vote_counts.c.post_id)
         .where(Post.community_id == community_id)
-        .order_by(Post.id)
-    ).all()
-    return list(posts)
+    )
+
+    if sort == SortOrder.POPULAR:
+        score_expr = (
+            func.coalesce(vote_counts.c.upvote_count, 0)
+            - func.coalesce(vote_counts.c.downvote_count, 0)
+        )
+        query = base_query.order_by(score_expr.desc(), Post.created_at.desc(), Post.id.desc())
+    elif sort == SortOrder.NEWEST:
+        query = base_query.order_by(Post.created_at.desc(), Post.id.desc())
+    else:  # SortOrder.OLDEST
+        query = base_query.order_by(Post.created_at.asc(), Post.id.asc())
+
+    results = db.execute(query).all()
+
+    posts = []
+    for post, upvote_count, downvote_count in results:
+        post.upvote_count = upvote_count
+        post.downvote_count = downvote_count
+        post.score = upvote_count - downvote_count
+        posts.append(post)
+
+    return posts
 
 
 @router.get("/posts/{post_id}", response_model=PostRead)
@@ -86,13 +133,28 @@ def get_post(
     post_id: int,
     db: Session = Depends(get_db_session),
 ) -> Post:
-    post = db.get(Post, post_id)
+    vote_counts = _get_vote_counts_subquery()
 
-    if post is None:
+    result = db.execute(
+        select(
+            Post,
+            func.coalesce(vote_counts.c.upvote_count, 0).label("upvote_count"),
+            func.coalesce(vote_counts.c.downvote_count, 0).label("downvote_count"),
+        )
+        .outerjoin(vote_counts, Post.id == vote_counts.c.post_id)
+        .where(Post.id == post_id)
+    ).first()
+
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found.",
         )
+
+    post, upvote_count, downvote_count = result
+    post.upvote_count = upvote_count
+    post.downvote_count = downvote_count
+    post.score = upvote_count - downvote_count
 
     return post
 

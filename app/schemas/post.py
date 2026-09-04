@@ -18,6 +18,9 @@ class PostRead(BaseModel):
     community_id: int
     created_at: datetime
     updated_at: datetime | None
+    upvote_count: int = 0
+    downvote_count: int = 0
+    score: int = 0
 
     model_config = {"from_attributes": True}
 
