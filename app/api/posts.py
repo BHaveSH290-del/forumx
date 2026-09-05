@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.db import get_db_session
 from app.models import Community, CommunityMember, Post, PostVote, User, VoteType
-from app.schemas.post import PostCreate, PostRead, PostUpdate
+from app.schemas.post import PostCreate, PostRead, PostUpdate, PaginatedPostResponse
 
 
 router = APIRouter(tags=["posts"])
@@ -79,12 +79,14 @@ def _get_vote_counts_subquery():
     )
 
 
-@router.get("/communities/{community_id}/posts", response_model=list[PostRead])
+@router.get("/communities/{community_id}/posts", response_model=PaginatedPostResponse)
 def list_community_posts(
     community_id: int,
     sort: SortOrder = Query(default=SortOrder.NEWEST),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db_session),
-) -> list[Post]:
+) -> PaginatedPostResponse:
     community = db.get(Community, community_id)
 
     if community is None:
@@ -116,6 +118,9 @@ def list_community_posts(
     else:  # SortOrder.OLDEST
         query = base_query.order_by(Post.created_at.asc(), Post.id.asc())
 
+    offset = (page - 1) * limit
+    query = query.limit(limit + 1).offset(offset)
+
     results = db.execute(query).all()
 
     posts = []
@@ -125,7 +130,16 @@ def list_community_posts(
         post.score = upvote_count - downvote_count
         posts.append(post)
 
-    return posts
+    has_next = len(posts) > limit
+    if has_next:
+        posts = posts[:limit]
+
+    return PaginatedPostResponse(
+        items=posts,
+        page=page,
+        limit=limit,
+        has_next=has_next,
+    )
 
 
 @router.get("/posts/{post_id}", response_model=PostRead)

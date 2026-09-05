@@ -25,6 +25,15 @@ class PostRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PaginatedPostResponse(BaseModel):
+    items: list[PostRead]
+    page: int
+    limit: int
+    has_next: bool
+
+    model_config = {"from_attributes": True}
+
+
 class PostUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     content: str | None = Field(default=None, min_length=1, max_length=5000)
