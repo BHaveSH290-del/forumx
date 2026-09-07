@@ -20,6 +20,7 @@ def create_community(
 ) -> Community:
     community = Community(
         name=community_in.name,
+        slug=community_in.slug,
         description=community_in.description,
         creator_id=current_user.id,
     )
@@ -38,6 +39,12 @@ def create_community(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Community name already exists.",
+            ) from exc
+
+        if constraint_name in ("uq_communities_slug", "uq_communities_slug_lower"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Community slug already exists.",
             ) from exc
 
         raise HTTPException(
