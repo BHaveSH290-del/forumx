@@ -8,6 +8,7 @@ from app.api.communities import router as communities_router
 from app.api.frontpage import router as frontpage_router
 from app.api.memberships import router as memberships_router
 from app.api.posts import router as posts_router
+from app.api.search import router as search_router
 from app.api.users import router as users_router
 from app.api.votes import router as votes_router
 from app.core.db import SessionLocal
@@ -20,6 +21,7 @@ app.include_router(communities_router)
 app.include_router(frontpage_router)
 app.include_router(memberships_router)
 app.include_router(posts_router)
+app.include_router(search_router)
 app.include_router(users_router)
 app.include_router(votes_router)
 
